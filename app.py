@@ -29,9 +29,9 @@ with st.sidebar:
         """
     )
 
-def terminate():
-    st.warning("You have chosen to terminate the AlgoBot")
-    st.stop()
+# def terminate():
+#     st.warning("You have chosen to terminate the AlgoBot")
+#     st.experimental_rerun()
 
 def disable():
     st.session_state.disabled = True
@@ -84,20 +84,21 @@ with leftcol:
                 st.info("SecretKey: " + "X" * 3*(len(AlpacaPaper_SecretKey)//4) + AlpacaPaper_SecretKey[-len(AlpacaPaper_SecretKey)//4:])
 
             AlpacaSymbol = st.text_input("If the ticker symbol is different on Alpaca Brokerage \
-                (Ex. BTC USD vs BTC-USD), please indicate the symbol as read by Alpaca", disabled=st.session_state.disabled)
+                (Ex. BTC USD vs BTC-USD), please indicate the symbol as read by Alpaca", disabled=st.session_state.disabled).upper()
 
     with strategy:
         st.write("### Strategy")
-        st.write("""Please select the desired trading interval
-        (how often the algorithm will attempt to execute a trade)""")
-        interval_end = st.radio("What time interval", ['Second', 'Minute', 'Hour'], 1, disabled=st.session_state.disabled)
-        INTerval = st.number_input(f"How many {interval_end}s in between each trade?", 0, 60, 15, disabled=st.session_state.disabled)
+        st.write("""Please select the desired trading interval (how often the algorithm will attempt to execute a trade)""")
+        interval = st.selectbox("What trading interval would you like to trade on?", ['5m', '15m', '30m', '1h', '2h', '3h', '6h', '12h'],
+            2, disabled=st.session_state.disabled)
+        #interval_end = st.radio("What time interval", ['Minute', 'Hour'], 0, disabled=st.session_state.disabled)
+        #INTerval = st.number_input(f"How many {interval_end}s in between each trade?", 0, 60, 15, disabled=st.session_state.disabled)
         algorithm = st.selectbox(f"Which trading algorithm would you like to test on {yfSymbol}?",
-            ["Buy_Hold", "MACD_Indicator", "MACD_RSI_Indicator", "RSI_Indicator", "SuperTrend_MACD_Indicator","Ridge_Indicator"],
+            ["Buy_Hold", "MACD_Indicator", "MACD_RSI_Indicator", "RSI_Indicator", "ReynerTeosBBands", "Ridge_Indicator"],
             2, disabled=st.session_state.disabled)
         direction = st.selectbox("What is your intended position on this security",
             ["long", "short", "both"], 0, disabled=st.session_state.disabled)
-        qty = st.slider(f"How many shares of {yfSymbol} would you like to trade?", 0, 100, 20, disabled=st.session_state.disabled)
+        qty = st.number_input(f"How many shares of {yfSymbol} would you like to trade?", 0, 100, 20, disabled=st.session_state.disabled)
 
 with rightcol:
     pass
@@ -126,15 +127,8 @@ if submit:
         index=pd.to_datetime([])
         )
 
-    interval_ends = {
-        "Second": 's',
-        "Minute": 'm',
-        "Hour": 'h'
-        }
-    interval_end = interval_ends[interval_end]
-
-    INTerval = int(INTerval)
-    interval = str(INTerval)+interval_end
+    interval_end = interval[-1]
+    INTerval = int(interval[:-1])
     period = str(INTerval*2)+interval_end
 
     try:
@@ -146,55 +140,11 @@ if submit:
     except OverflowError or Exception:
         raise ConnectionError("Could not download data from yahoo finance")
 
-    def cleanFrame(histdata):
-        df = histdata.copy()
-        # Adjust Datetime Index to appropriate format
-        df.reset_index(inplace=True)
-        pd.to_datetime(df['Datetime'])
-        if crypto:
-            df['Datetime'] = df['Datetime'] - pd.Timedelta(hours=5)
-        df['Datetime'] = df["Datetime"].dt.strftime("%Y-%m-%d %H:%M:%S")
-        df.set_index('Datetime', inplace=True)
-
-        df['Change'], df['Position'], df['FilledPosition'], df['Check'] = 0, 0, 0, 0
-        df['Passive Returns'], df[f'{algorithm} Returns'] = 0, 0
-        df = df[['Adj Close', 'Change', 'Position', 'FilledPosition',
-            'Check', 'Passive Returns', f'{algorithm} Returns']]
-        return df
-
-    all_data = cleanFrame(histdata)
-
+    all_data = cleanFrame(histdata, algorithm, crypto)
     ndata = len(all_data)-1
 
     if placeTrades: TradingAccount = \
             AlpacaPaper(AlpacaPaper_KeyID, AlpacaPaper_SecretKey)
-
-    def placetrade(TradingAccount, all_data):
-        # Execute Order on Alpaca Paper Trading Account
-        # If Position is Long and there is no Open Position, Open it
-        if all_data.Position.tail(1).values == 1 and not TradingAccount.CurrentPositions(AlpacaSymbol):
-            TradingAccount.CreateOrder(AlpacaSymbol, qty, 'buy', type='market', time_in_force='gtc')
-
-        # If Position is None and there is an Open Position, Close it
-        if all_data.Position.tail(1).values == 0 and TradingAccount.CurrentPositions(AlpacaSymbol):
-            TradingAccount.ClosePosition(AlpacaSymbol)
-
-    def checkstrat(execute: ExecuteStrategy, all_data: pd.DataFrame):
-        # Check if Strategy is working (1 means Good Trade, 0 means None, -1 means Bad Trade)
-
-        # If previous position was long and change in price from previous to current call is positive, Good!
-        # If current position is none and change in price from current to previous call is negative, Good!
-        if (all_data.Change[-1:].values >= 0 and all_data.Position[-2:-1].values == execute.PosUp) or \
-                (all_data.Change[-1:].values < 0 and all_data.Position[-2:-1].values == execute.PosDown):
-            all_data.Check[-1] = 1
-        # If current position is long and change in price from current to previous call is negative, Bad!
-        # If current position is short and change in price from current to previous call is positive, Bad!
-        elif (all_data.Change[-1:].values < 0 and all_data.Position[-2:-1].values == execute.PosUp) or \
-            (all_data.Change[-1:].values >= 0 and all_data.Position[-2:-1].values == execute.PosDown):
-            all_data.Check[-1] = -1
-        # For all other cases, Neutral!
-        else: all_data.Check[-1] = 0
-        return all_data
 
     if USmarket:
         market_open = '0930'
@@ -216,43 +166,43 @@ if submit:
     df = all_data[ndata:]
     
     with placeholder.container():
-        col1, col2, col3 = st.columns((5, 5, 5), gap='large')
+        col1, col2, col3 = st.columns((4, 4, 6), gap='medium')
 
         with col1:
-            st.header(f"Current {yfSymbol} Price")
+            st.header("Key Performance Indicators")
             st.metric(
-                '**And Change Since Last Query**',
+                f'**Current {yfSymbol} Price\nAnd Change Since Last Query**',
                 f"${df['Adj Close'].iloc[-1:].values[0]:.2f}",
                 f"{df['Change'].iloc[-1:].values[0]:.2f}"
+            )
+            st.metric(
+                "**Percentage of Profitable Positions**",
+                f"{0}%",
+                delta=None
+            )
+            st.metric(
+                "**Percentage of Loss-Incurring Positions**",
+                f"{0}%",
+                delta=None
+            )
+            st.metric(
+                f"**{algorithm} Returns Compared to Passive Returns**",
+                f"{0} USD",
+                delta=0
             )
 
         with col2:
             st.header("Live Data")
             st.write(f"Charts and graphs will be updated every {INTerval} {time_interval}s")
             st.dataframe(df[['Adj Close', 'Change', 'Position', 'Check']])
+            st.write("To terminate the bot, simply close the tab!")
 
         with col3:
-            st.header("Key Performance Indicators")
-            st.metric("**Profitable/Losing Positions**",
-                f"{0}",
-                delta=None
-            )
-            # st.metric("**Percentage of Bad Positions**",
-            #     f"{0}%",
-            #     delta=None
-            # )
-            st.metric(f"**{algorithm} Returns Compared to Passive Returns**",
-                f"${0}",
-                delta=0
-            )
-
-        with st.container():
-            returnsChart = interactive_plot(
-                df[['Passive Returns', f'{algorithm} Returns']],
-                f'Passive Returns vs {algorithm} Returns')
+            st.header(f'{algorithm} Returns, {interval_end.upper()}{INTerval} Chart')
+            returnsChart = interactive_plot(df[['Passive Returns', f'{algorithm} Returns']])
             st.plotly_chart(returnsChart)
- 
-    st.button("Terminate Bot", on_click=terminate)
+
+    # st.button("Terminate Bot", on_click=terminate)
 
     while True:
 
@@ -283,58 +233,57 @@ if submit:
             execute = ExecuteStrategy(all_data, direction)
             all_data = getattr(execute, algorithm)()
 
-            all_data = checkstrat(execute, all_data)
-            if placeTrades: placetrade(TradingAccount, all_data)
+            all_data = checkstrat(all_data, execute)
+            if placeTrades: placetrade(all_data, TradingAccount, AlpacaSymbol, qty)
 
             df = all_data[ndata:]
 
             # Key Metrics
             curr_price = df['Adj Close'].iloc[-1:].values[0]
             curr_change = df['Change'].iloc[-1:].values[0]
-            perc_prof = len(df[df["Check"] >= 0]) / len(df) * 100
-            perc_loss = len(df[df["Check"] == -1]) / len(df) * 100
-            df[f'{algorithm} Returns'] = (df['Change'] * df['Position']).cumsum() * qty
+            perc_prof = len(df[df["Check"].iloc[1:] == 1]) / (len(df) - 1) * 100
+            perc_loss = len(df[df["Check"].iloc[1:] == -1]) / (len(df) - 1) * 100
+            df[f'{algorithm} Returns'] = (df['Change'].shift(1) * df['Position']).cumsum() * qty
             df['Passive Returns'] = df['Change'].cumsum() * qty
-            total_strat_ret = df[f'{algorithm} Returns'].iloc[-1:].values[0] * qty
-            diff_from_passive_ret = total_strat_ret - df['Passive Returns'].iloc[-1:].values[0] * qty
-            
+            total_strat_ret = df[f'{algorithm} Returns'].iloc[-1:].values[0]
+            diff_from_passive_ret = total_strat_ret - df['Passive Returns'].iloc[-1:].values[0]
             
             # Refresh Website with new data
             with placeholder.container():
-                col1, col2, col3 = st.columns((5, 5, 5), gap='large')
+                col1, col2, col3 = st.columns((4, 4, 6), gap='medium')
 
                 with col1:
-                    st.header(f"Current {yfSymbol} Price")
+                    st.header("Key Performance Indicators")
                     st.metric(
-                        '**And Change Since Last Query**',
+                        f'**Current {yfSymbol} Price\nAnd Change Since Last Query**',
                         f"${curr_price:.2f}",
                         f"{curr_change:.2f}"
+                    )
+                    st.metric(
+                        "**Percentage of Profitable Positions**",
+                        f"{perc_prof:.2f}%",
+                        delta=None
+                    )
+                    st.metric("**Percentage of Loss-Incurring Positions**",
+                        f"{perc_loss:.2f}%",
+                        delta=None
+                    )
+                    st.metric(
+                        f"**{algorithm} Returns Compared to Passive Returns**",
+                        f"{total_strat_ret:.2f} USD",
+                        delta=f"{diff_from_passive_ret:.2f}"
                     )
 
                 with col2:
                     st.header("Live Data")
-                    st.write(f"Charts and graphs will be updated every {INTerval} {time_interval}s")
+                    st.write(f"Website will refresh and update graphs/charts every {INTerval} {time_interval}s")
                     # df_sel = df.query("Position == @position_translation & Check == @check_translation")
                     st.dataframe(df[['Adj Close', 'Change', 'Position', 'Check']])
-
+                    st.write("To terminate the bot, simply close the tab!")
+                    
                 with col3:
-                    st.header("Key Performance Indicators")
-                    st.metric("**Profitable/Losing Positions**",
-                        f"{perc_prof/perc_loss:.2f}%",
-                        delta=None)
-                    # st.metric("**Percentage of Bad Positions**",
-                    #     f"{perc_loss:.2f}%",
-                    #     delta=None
-                    # )
-                    st.metric(f"**{algorithm} Returns Compared to Passive Returns**",
-                        f"${total_strat_ret:.2f}",
-                        delta=f"{diff_from_passive_ret:.2f}"
-                    )
-
-                with st.container():
-                    returnsChart = interactive_plot(
-                        df[['Passive Returns', f'{algorithm} Returns']],
-                        f'Passive Returns vs {algorithm} Returns')
+                    st.header(f'{algorithm} Returns, {interval_end.upper()}{INTerval} Chart')
+                    returnsChart = interactive_plot(df[['Passive Returns', f'{algorithm} Returns']])
                     st.plotly_chart(returnsChart)
 
             time.sleep(15)

@@ -3,16 +3,14 @@ import streamlit as st
 import datetime as dt
 import pandas as pd
 import pandas_ta as ta
-# import numpy as np
+import numpy as np
 import time
 import json
 import requests
 import warnings
 import plotly.express as px
-# from sklearn.linear_model import RidgeCV
-# from sklearn.model_selection import RepeatedKFold
-import subprocess
-import sys
+from sklearn.linear_model import RidgeCV
+from sklearn.model_selection import RepeatedKFold
 
 folder = "AlgoBot/"
 
@@ -21,17 +19,6 @@ pd.options.display.show_dimensions = False
 pd.set_option('display.max_columns', None)
 pd.options.mode.chained_assignment = None
 warnings.filterwarnings('ignore')
-
-
-def interactive_plot(df: pd.DataFrame, title: str):
-    """Uses Plotly.Express to chart a line graph of numeric data from each column of a dataframe"""
-    fig = px.line(title=title)
-    fig.update_layout(autosize=True, xaxis_title="Datetime", yaxis_title="Profit/Loss in Dollars")
-    for k in df.columns:
-        fig.add_scatter(x=df.index, y=df[k], name=k)
-    fig.update_traces(showlegend=True)
-    return fig
-
 
 class ExecuteStrategy:
     def __init__(self, df: pd.DataFrame, type: str = "long"):
@@ -73,9 +60,10 @@ class ExecuteStrategy:
         """
         df = self.df.copy()
         # MACD (12, 26, 9) quick sell signal, more transactions
-        ema_fast = df['Adj Close'].ewm(span=12, adjust=False, min_periods=12).mean()
-        ema_slow = df['Adj Close'].ewm(span=26, adjust=False, min_periods=26).mean()
-        df['MACD'] = ema_fast - ema_slow
+        df['MACD'] = ta.macd(df['Adj Close'], fast=12, slow=26, signal=9).iloc[:, 1]
+        # ema_fast = df['Adj Close'].ewm(span=12, adjust=False, min_periods=12).mean()
+        # ema_slow = df['Adj Close'].ewm(span=26, adjust=False, min_periods=26).mean()
+        # df['MACD'] = ema_fast - ema_slow
         df['Signal'] = df.MACD.ewm(span=9, adjust=False, min_periods=9).mean()
 
         if df.MACD[-1:].values > df.Signal[-1:].values:
@@ -101,12 +89,12 @@ class ExecuteStrategy:
         # If previous RSI is less than 30 and current RSI greater than previous, buy
         # Or if MACD crosses over signal line AND RSI is less than 50, buy
         if (df.RSI[-2:-1].values <= 28 and df.RSI[-1:].values > df.RSI[-2:-1].values) or \
-                (df.MACD_diff[-1:].values > df.MACD_diff[-4:-1].values.mean() and df.RSI[-1:].values <= 50):
+                (df.MACD[-1:].values > df.MACD[-4:-1].values.mean() and df.RSI[-1:].values <= 50):
             df.Position[-1] = self.PosUp
         # If previous RSI is greater than 70 and current RSI less than previous, sell
         # Or if Signal line crosses over MACD and RSI greater than 50, sell
         elif (df.RSI[-2:-1].values >= 72 and df.RSI[-1:].values < df.RSI[-2:-1].values) or \
-                (df.MACD_diff[-1:].values < df.MACD_diff[-4:-1].values.mean() and df.RSI[-1:].values > 50):
+                (df.MACD[-1:].values < df.MACD[-4:-1].values.mean() and df.RSI[-1:].values > 50):
             df.Position[-1] = self.PosDown
         # keep previous position if otherwise
         else:
@@ -121,8 +109,7 @@ class ExecuteStrategy:
         :param int length: How many periods of data it looks back to calculate RSI
         """
         df = self.df.copy()
-        df.ta.rsi(close='Adj Close', length=length, append=True)
-        df.columns.values[-1] = 'RSI'
+        df['RSI'] = ta.rsi(df['Adj Close'], length)
 
         # If previous RSI is less than 30 and current RSI greater than previous, buy
         if df.RSI[-2:-1].values <= 30 and df.RSI[-1:].values > df.RSI[-2:-1].values:
@@ -133,25 +120,6 @@ class ExecuteStrategy:
         # keep previous position if otherwise
         else:
             df.Position[-1] = df.Position[-2:-1].values
-        return df
-
-    def SuperTrend_MACD_Indicator(self) -> pd.DataFrame:
-        """
-        Strategy that uses signals from both, 15-minute MACD and
-        SuperTrend indicators to create buy or sell signals.
-        Outputs dataframe with appended indicators and 'Position'
-        """
-        df = self.df.copy()
-        # Calculating MACD
-        df['MACD_diff'] = ta.macd(df.Close, fast=12, slow=26, signal=9).iloc[:, 1]
-        # Calculating SUPERTREND
-        df['SupertrendDirection'] = ta.supertrend(df.High, df.Low, df.Close, length=10, multiplier=3).iloc[:, 1]
-
-        # If the MACD is greater than the average MACD_diff is positive and Supertrend direction is 1, buy signal
-        if df.MACD_diff[-1:].values >= 0 and df.SupertrendDirection[-1:].values > 0:  # both need to be true
-            df.Position[-1] = self.PosUp
-        else:  # If opposite, sell signal
-            df.Position[-1] = self.PosDown
         return df
 
     def ReynerTeosBBands(self) -> pd.DataFrame:
@@ -180,78 +148,78 @@ class ExecuteStrategy:
         return df
 
 
-    # def Ridge_Indicator(self, window_size : int =7) -> pd.DataFrame:
-    #     """
-    #     Strategy that uses a ridge regression model to predict
-    #     the returns of the next time period to determine if a
-    #     position should be active or not. Outputs dataframe with
-    #     predicted returns and position
-    #     """
-    #     stock = self.df.copy()
-    #     df = self.df.copy()
-    #     stock['LogReturns'] = np.log1p(stock['Adj Close'].pct_change())
-    #     stock = stock.loc[:, ['LogReturns']][1:]
+    def Ridge_Indicator(self, window_size : int =7) -> pd.DataFrame:
+        """
+        Strategy that uses a ridge regression model to predict
+        the returns of the next time period to determine if a
+        position should be active or not. Outputs dataframe with
+        predicted returns and position
+        """
+        stock = self.df.copy()
+        df = self.df.copy()
+        stock['LogReturns'] = np.log1p(stock['Adj Close'].pct_change())
+        stock = stock.loc[:, ['LogReturns']][1:]
 
-    #     # Create n rows for machine to process window size
-    #     def create_targets(stock_data, n=window_size):
-    #         target_df = stock_data.copy().drop(columns='LogReturns')
-    #         for j in range(n, -1, -1):
-    #             target_df[f'Target-{j}'] = stock_data['LogReturns'].shift(j)
-    #         target_df.rename(columns={'Target-0': 'Target'}, inplace=True)
-    #         target_df = target_df[n:]
-    #         return target_df
+        # Create n rows for machine to process window size
+        def create_targets(stock_data, n=window_size):
+            target_df = stock_data.copy().drop(columns='LogReturns')
+            for j in range(n, -1, -1):
+                target_df[f'Target-{j}'] = stock_data['LogReturns'].shift(j)
+            target_df.rename(columns={'Target-0': 'Target'}, inplace=True)
+            target_df = target_df[n:]
+            return target_df
 
-    #     stock_windows = create_targets(stock)
+        stock_windows = create_targets(stock)
 
-    #     # Preprocessing: Scale data for Ridge Regression modeling
-    #     minscaler = float(stock_windows.min()[window_size])
-    #     maxscaler = float(stock_windows.max()[window_size])
-    #     stock_windows = (stock_windows - minscaler) / (maxscaler - minscaler)
+        # Preprocessing: Scale data for Ridge Regression modeling
+        minscaler = float(stock_windows.min()[window_size])
+        maxscaler = float(stock_windows.max()[window_size])
+        stock_windows = (stock_windows - minscaler) / (maxscaler - minscaler)
 
-    #     # Convert target pandas df to array
-    #     def dfToArray(df):
-    #         df_np = df.to_numpy()
-    #         X = df_np[:, :-1]
-    #         y = df_np[:, -1]
-    #         return X, y
+        # Convert target pandas df to array
+        def dfToArray(df):
+            df_np = df.to_numpy()
+            X = df_np[:, :-1]
+            y = df_np[:, -1]
+            return X, y
 
-    #     # Create splits for Train 70%, Val 30%
-    #     split = int(len(stock_windows) * 0.7)
-    #     train = stock_windows[:split]
-    #     test = stock_windows[split:]
+        # Create splits for Train 70%, Val 30%
+        split = int(len(stock_windows) * 0.7)
+        train = stock_windows[:split]
+        test = stock_windows[split:]
 
-    #     # Split our data accordingly
-    #     X_train, y_train = dfToArray(train)
-    #     X_test, _ = dfToArray(test)
+        # Split our data accordingly
+        X_train, y_train = dfToArray(train)
+        X_test, _ = dfToArray(test)
 
-    #     # define ridge regression model evaluation method
-    #     cv = RepeatedKFold(n_splits=10, n_repeats=5, random_state=20005933)
-    #     # create model
-    #     reg_model = RidgeCV(alphas=np.arange(0, 2+0.01, 0.01), cv=cv, scoring='neg_mean_absolute_error')
-    #     # train model
-    #     reg_model.fit(X_train, y_train)
+        # define ridge regression model evaluation method
+        cv = RepeatedKFold(n_splits=10, n_repeats=5, random_state=20005933)
+        # create model
+        reg_model = RidgeCV(alphas=np.arange(0.01, 2+0.01, 0.01), cv=cv, scoring='neg_mean_absolute_error')
+        # train model
+        reg_model.fit(X_train, y_train)
 
-    #     # Generate predictions for n days in the future by recursively feeding new predictions
-    #     pred_list = []
-    #     batch = X_test[-window_size:, -1].reshape(1, window_size)
-    #     pred_list.append(reg_model.predict(batch)[0])
-    #     predictions = [float((i * (maxscaler - minscaler)) + minscaler) for i in pred_list]
-    #     if predictions[0] >= 0:
-    #         predictions = [1]
-    #     else:
-    #         predictions = [-1]
+        # Generate predictions for n days in the future by recursively feeding new predictions
+        pred_list = []
+        batch = X_test[-window_size:, -1].reshape(1, window_size)
+        pred_list.append(reg_model.predict(batch)[0])
+        predictions = [float((i * (maxscaler - minscaler)) + minscaler) for i in pred_list]
+        if predictions[0] >= 0:
+            predictions = [1]
+        else:
+            predictions = [-1]
 
-    #     df['RidgeRegD'] = 0
-    #     df['RidgeRegD'][-1:] = predictions
+        df['RidgeRegD'] = 0
+        df['RidgeRegD'][-1:] = predictions
 
-    #     # Strategy: Buy/sell at start of day based on if today's returns are predicted to be positive or negative, 1 stock at a time
-    #     # Opted to use a Long only strategy because it has lower std and drawdowns than long + short strategy
-    #     # If my predicted daily returns for today is higher than the n-day SMA of my predicted daily returns
-    #     if df['RidgeRegD'][-1:].values >= 0:
-    #         df.Position[-1] = self.PosUp
-    #     else:  # If opposite, sell signal
-    #         df.Position[-1] = self.PosDown
-    #     self.df = df
+        # Strategy: Buy/sell at start of day based on if today's returns are predicted to be positive or negative, 1 stock at a time
+        # Opted to use a Long only strategy because it has lower std and drawdowns than long + short strategy
+        # If my predicted daily returns for today is higher than the n-day SMA of my predicted daily returns
+        if df['RidgeRegD'][-1:].values >= 0:
+            df.Position[-1] = self.PosUp
+        else:  # If opposite, sell signal
+            df.Position[-1] = self.PosDown
+        return df
 
 
 class AlpacaPaper:
@@ -371,3 +339,56 @@ class AlpacaPaper:
             port_hist.to_csv(path_or_buf="LiveDataCSV/Alpaca_Portfolio_History.csv", mode='w', header=True)
 
         return port_hist
+
+
+def interactive_plot(df: pd.DataFrame):
+    """Uses Plotly.Express to chart a line graph of numeric data from each column of a dataframe"""
+    fig = px.line()
+    fig.update_layout(autosize=True, xaxis_title="Datetime", yaxis_title="Profit/Loss in Dollars")
+    for k in df.columns:
+        fig.add_scatter(x=df.index, y=df[k], name=k)
+    fig.update_traces(showlegend=True)
+    return fig
+
+def cleanFrame(histdata, algorithm, crypto):
+    df = histdata.copy()
+    # Adjust Datetime Index to appropriate format
+    df.reset_index(inplace=True)
+    pd.to_datetime(df['Datetime'])
+    if crypto:
+        df['Datetime'] = df['Datetime'] - pd.Timedelta(hours=5)
+    df['Datetime'] = df["Datetime"].dt.strftime("%Y-%m-%d %H:%M:%S")
+    df.set_index('Datetime', inplace=True)
+
+    df['Change'], df['Position'], df['FilledPosition'], df['Check'] = 0, 0, 0, 0
+    df['Passive Returns'], df[f'{algorithm} Returns'] = 0, 0
+    df = df[['Adj Close', 'Change', 'Position', 'FilledPosition',
+        'Check', 'Passive Returns', f'{algorithm} Returns']]
+    return df
+
+def placetrade(all_data, TradingAccount, AlpacaSymbol, qty):
+    # Execute Order on Alpaca Paper Trading Account
+    # If Position is Long and there is no Open Position, Open it
+    if all_data.Position.tail(1).values == 1 and not TradingAccount.CurrentPositions(AlpacaSymbol):
+        TradingAccount.CreateOrder(AlpacaSymbol, qty, 'buy', type='market', time_in_force='gtc')
+
+    # If Position is None and there is an Open Position, Close it
+    if all_data.Position.tail(1).values == 0 and TradingAccount.CurrentPositions(AlpacaSymbol):
+        TradingAccount.ClosePosition(AlpacaSymbol)
+
+def checkstrat(all_data: pd.DataFrame, execute: ExecuteStrategy):
+    # Check if Strategy is working (1 means Good Trade, 0 means None, -1 means Bad Trade)
+
+    # If previous position was long and change in price from previous to current call is positive, Good!
+    # If current position is none and change in price from current to previous call is negative, Good!
+    if (all_data.Change[-1:].values >= 0 and all_data.Position[-2:-1].values == execute.PosUp) or \
+            (all_data.Change[-1:].values < 0 and all_data.Position[-2:-1].values == execute.PosDown):
+        all_data.Check[-1] = 1
+    # If current position is long and change in price from current to previous call is negative, Bad!
+    # If current position is short and change in price from current to previous call is positive, Bad!
+    elif (all_data.Change[-1:].values < 0 and all_data.Position[-2:-1].values == execute.PosUp) or \
+        (all_data.Change[-1:].values >= 0 and all_data.Position[-2:-1].values == execute.PosDown):
+        all_data.Check[-1] = -1
+    # For all other cases, Neutral!
+    else: all_data.Check[-1] = 0
+    return all_data
