@@ -61,12 +61,8 @@ class ExecuteStrategy:
         df = self.df.copy()
         # MACD (12, 26, 9) quick sell signal, more transactions
         df['MACD'] = ta.macd(df['Adj Close'], fast=12, slow=26, signal=9).iloc[:, 1]
-        # ema_fast = df['Adj Close'].ewm(span=12, adjust=False, min_periods=12).mean()
-        # ema_slow = df['Adj Close'].ewm(span=26, adjust=False, min_periods=26).mean()
-        # df['MACD'] = ema_fast - ema_slow
-        df['Signal'] = df.MACD.ewm(span=9, adjust=False, min_periods=9).mean()
 
-        if df.MACD[-1:].values > df.Signal[-1:].values:
+        if df.MACD[-1:].values > 0:
             df.Position[-1] = self.PosUp
         else:
             df.Position[-1] = self.PosDown
@@ -82,7 +78,7 @@ class ExecuteStrategy:
         """
         df = self.df.copy()
         # Calculating MACD
-        df['MACD_diff'] = ta.macd(df['Adj Close'], fast=12, slow=26, signal=9).iloc[:, 1]
+        df['MACD'] = ta.macd(df['Adj Close'], fast=12, slow=26, signal=9).iloc[:, 1]
         # Calculating RSI
         df['RSI'] = ta.rsi(df['Adj Close'], length)
 

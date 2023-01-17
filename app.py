@@ -241,8 +241,8 @@ if submit:
             # Key Metrics
             curr_price = df['Adj Close'].iloc[-1:].values[0]
             curr_change = df['Change'].iloc[-1:].values[0]
-            perc_prof = len(df[df["Check"].iloc[1:] == 1]) / (len(df) - 1) * 100
-            perc_loss = len(df[df["Check"].iloc[1:] == -1]) / (len(df) - 1) * 100
+            perc_prof = len(df[df["Check"] == 1]) / (len(df) - 1) * 100
+            perc_loss = len(df[df["Check"] == -1]) / (len(df) - 1) * 100
             df[f'{algorithm} Returns'] = (df['Change'].shift(1) * df['Position']).cumsum() * qty
             df['Passive Returns'] = df['Change'].cumsum() * qty
             total_strat_ret = df[f'{algorithm} Returns'].iloc[-1:].values[0]
