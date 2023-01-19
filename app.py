@@ -1,6 +1,6 @@
 from funcs import *
 
-st.set_page_config(page_title="Python Algorithmic Trading Bot", page_icon=":robot_face:", layout="wide", initial_sidebar_state="expanded")
+st.set_page_config(page_title="Python Algorithmic Trading Bot (Beta)", page_icon=":robot_face:", layout="wide", initial_sidebar_state="expanded")
 remove_top = """
     <style>
         div.block-container{padding-top:2rem;}
@@ -40,7 +40,7 @@ def disable():
 if "disabled" not in st.session_state:
     st.session_state.disabled = False
 
-leftcol, rightcol = st.columns((7,4))
+leftcol, rightcol = st.columns((7,2))
 
 with leftcol:
 
@@ -104,7 +104,12 @@ with rightcol:
     pass
 
 st.write("-------")
-
+st.write("""
+    Experimental! To run the bot on the server, you must keep the page from idling.
+    For practical use, head to [the github repository](https://github.com/tej100/AlgoTradingBot) and follow the setup
+    instructions to run the trading bot on a local host indefinitely.
+    """
+)
 # Submit Button to Execute Program
 submit = st.button("Submit Parameters", on_click=disable, disabled=st.session_state.disabled)
 
