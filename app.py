@@ -1,6 +1,6 @@
 from funcs import *
 
-st.set_page_config(page_title="Python Algorithmic Trading Bot - Beta", page_icon=":robot_face:", layout="wide", initial_sidebar_state="expanded")
+st.set_page_config(page_title="Python Algorithmic Trading Bot", page_icon=":robot_face:", layout="wide", initial_sidebar_state="expanded")
 remove_top = """
     <style>
         div.block-container{padding-top:2rem;}
@@ -46,7 +46,7 @@ with leftcol:
 
     st.markdown(
         """
-        # Python Algorithmic Trading Bot
+        # Python Algorithmic Trading Bot (Beta)
 
         Runs AlgoBot for Trading Different Strategies on Eternal Python Script.
         Has capabilities of executing live trades through Alpaca API Trading brokerage account.
