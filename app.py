@@ -1,6 +1,6 @@
 from funcs import *
 
-st.set_page_config(page_title="Python Algorithmic Trading Bot (Beta)", page_icon=":robot_face:", layout="wide", initial_sidebar_state="expanded")
+st.set_page_config(page_title="Python Algorithmic Trading Bot - Beta", page_icon=":robot_face:", layout="wide", initial_sidebar_state="expanded")
 remove_top = """
     <style>
         div.block-container{padding-top:2rem;}
