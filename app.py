@@ -97,7 +97,7 @@ with leftcol:
         #interval_end = st.radio("What time interval", ['Minute', 'Hour'], 0, disabled=st.session_state.disabled)
         #INTerval = st.number_input(f"How many {interval_end}s in between each trade?", 0, 60, 15, disabled=st.session_state.disabled)
         algorithm = st.selectbox(f"Which trading algorithm would you like to test on {yfSymbol}?",
-            ["Buy_Hold", "MACD_Indicator", "MACD_RSI_Indicator", "RSI_Indicator", "ReynerTeosBBands", "Ridge_Indicator"],
+            ["Buy_Hold", "MACD_Indicator", "MACD_RSI_Indicator", "RSI_Indicator", "ReynerTeosBBands", "Ridge_Indicator", "RandomForest_Indicator"],
             2, disabled=st.session_state.disabled)
         direction = st.selectbox("What is your intended position on this security",
             ["long", "short", "both"], 0, disabled=st.session_state.disabled)
@@ -243,7 +243,7 @@ if submit:
 
             # Append historical data to current data and run through strategy
             all_data = pd.concat([all_data, current_data.tail(1)])
-            all_data['Change'][-1] = price - all_data['Close'][-2]
+            all_data.loc[all_data.index[-1], 'Change'] = price - all_data['Close'].iloc[-2]
             execute = ExecuteStrategy(all_data, direction)
             all_data = getattr(execute, algorithm)()
 

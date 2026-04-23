@@ -1,0 +1,8 @@
+strategy,total_return,sharpe_ratio,sortino_ratio,max_drawdown,win_rate,alpha,beta,num_trades
+Buy_Hold,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0
+MACD_Indicator,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0
+MACD_RSI_Indicator,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0
+RSI_Indicator,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0
+ReynerTeosBBands,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0
+Ridge_Indicator,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0
+RandomForest_Indicator,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0
