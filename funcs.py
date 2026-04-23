@@ -60,7 +60,7 @@ class ExecuteStrategy:
         """
         df = self.df.copy()
         # MACD (12, 26, 9) quick sell signal, more transactions
-        df['MACD'] = ta.macd(df['Adj Close'], fast=12, slow=26, signal=9).iloc[:, 1]
+        df['MACD'] = ta.macd(df['Close'], fast=12, slow=26, signal=9).iloc[:, 1]
 
         if df.MACD[-1:].values > 0:
             df.Position[-1] = self.PosUp
@@ -78,9 +78,9 @@ class ExecuteStrategy:
         """
         df = self.df.copy()
         # Calculating MACD
-        df['MACD'] = ta.macd(df['Adj Close'], fast=12, slow=26, signal=9).iloc[:, 1]
+        df['MACD'] = ta.macd(df['Close'], fast=12, slow=26, signal=9).iloc[:, 1]
         # Calculating RSI
-        df['RSI'] = ta.rsi(df['Adj Close'], length)
+        df['RSI'] = ta.rsi(df['Close'], length)
 
         # If previous RSI is less than 30 and current RSI greater than previous, buy
         # Or if MACD crosses over signal line AND RSI is less than 50, buy
@@ -105,7 +105,7 @@ class ExecuteStrategy:
         :param int length: How many periods of data it looks back to calculate RSI
         """
         df = self.df.copy()
-        df['RSI'] = ta.rsi(df['Adj Close'], length)
+        df['RSI'] = ta.rsi(df['Close'], length)
 
         # If previous RSI is less than 30 and current RSI greater than previous, buy
         if df.RSI[-2:-1].values <= 30 and df.RSI[-1:].values > df.RSI[-2:-1].values:
@@ -121,18 +121,18 @@ class ExecuteStrategy:
     def ReynerTeosBBands(self) -> pd.DataFrame:
         df = self.df.copy()
         # Calculating SMA for trend
-        df['SMA200'] = ta.sma(df['Adj Close'], 200)
+        df['SMA200'] = ta.sma(df['Close'], 200)
         # Calculating BBands for pullback
-        df['LowerBand'] = ta.bbands(df['Adj Close'], 20, 2.5).iloc[:, 0]
+        df['LowerBand'] = ta.bbands(df['Close'], 20, 2.5).iloc[:, 0]
         # Calculating RSI for exit
-        df['RSI'] = ta.rsi(df['Adj Close'], 2)
+        df['RSI'] = ta.rsi(df['Close'], 2)
 
         # Write Strategy3
 
         # Entry Conditions
         if df['FilledPosition'][-2:-1].values == 0 and \
-        df['Adj Close'][-1:].values > df['SMA200'][-1:].values and \
-        df['Adj Close'][-1:].values < df['LowerBand'][-1:].values:
+        df['Close'][-1:].values > df['SMA200'][-1:].values and \
+        df['Close'][-1:].values < df['LowerBand'][-1:].values:
             df.Position[-1] = self.PosUp
         # Define exit conditions if already position
         elif df['FilledPosition'][-2:-1].values == 1 and \
@@ -153,7 +153,7 @@ class ExecuteStrategy:
         """
         stock = self.df.copy()
         df = self.df.copy()
-        stock['LogReturns'] = np.log1p(stock['Adj Close'].pct_change())
+        stock['LogReturns'] = np.log1p(stock['Close'].pct_change())
         stock = stock.loc[:, ['LogReturns']][1:]
 
         # Create n rows for machine to process window size
@@ -348,17 +348,18 @@ def interactive_plot(df: pd.DataFrame):
 
 def cleanFrame(histdata, algorithm, crypto):
     df = histdata.copy()
-    # Adjust Datetime Index to appropriate format
     df.reset_index(inplace=True)
-    pd.to_datetime(df['Datetime'])
+    dt_col = 'Datetime' if 'Datetime' in df.columns else 'Date'
+    df[dt_col] = pd.to_datetime(df[dt_col])
     if crypto:
-        df['Datetime'] = df['Datetime'] - pd.Timedelta(hours=5)
-    df['Datetime'] = df["Datetime"].dt.strftime("%Y-%m-%d %H:%M:%S")
+        df[dt_col] = df[dt_col] - pd.Timedelta(hours=5)
+    df[dt_col] = df[dt_col].dt.strftime("%Y-%m-%d %H:%M:%S")
+    df.rename(columns={dt_col: 'Datetime'}, inplace=True)
     df.set_index('Datetime', inplace=True)
 
     df['Change'], df['Position'], df['FilledPosition'], df['Check'] = 0, 0, 0, 0
     df['Passive Returns'], df[f'{algorithm} Returns'] = 0, 0
-    df = df[['Adj Close', 'Change', 'Position', 'FilledPosition',
+    df = df[['Close', 'Change', 'Position', 'FilledPosition',
         'Check', 'Passive Returns', f'{algorithm} Returns']]
     return df
 

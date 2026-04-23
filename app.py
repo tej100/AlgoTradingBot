@@ -60,8 +60,11 @@ with leftcol:
         yfSymbol = (st.text_input("Which Ticker would you like to trade?", "SPY", disabled=st.session_state.disabled)).upper()
         if yfSymbol:
             try:
-                yf.Ticker(yfSymbol)
-            except KeyError or IndexError:
+                ticker = yf.Ticker(yfSymbol)
+                hist = ticker.history(period="1d")
+                if hist.empty:
+                    st.info("Please Input a Valid Ticker Symbol")
+            except Exception:
                 st.info("Please Input a Valid Ticker Symbol")
 
         USmarket = st.checkbox("Does this security trade on the US market?", True, disabled=st.session_state.disabled)
@@ -128,21 +131,27 @@ if submit:
 
     current_data = pd.DataFrame(
         data=[],
-        columns=['Adj Close', 'Position', 'FilledPosition', 'Check'],
+        columns=['Close', 'Position', 'FilledPosition', 'Check'],
         index=pd.to_datetime([])
         )
 
     interval_end = interval[-1]
     INTerval = int(interval[:-1])
-    period = str(INTerval*2)+interval_end
+    if interval_end == 'm':
+        period = "1d"
+    elif interval_end == 'h':
+        period = "5d"
+    else:
+        period = str(INTerval*2)+interval_end
 
     try:
         histdata = round(yf.download(
                 yfSymbol, 
                 period="60d", 
                 interval=interval, 
-                progress=False)[['Adj Close']],2)
-    except OverflowError or Exception:
+                progress=False,
+                multi_level_index=False)[['Close']],2)
+    except (OverflowError, Exception):
         raise ConnectionError("Could not download data from yahoo finance")
 
     all_data = cleanFrame(histdata, algorithm, crypto)
@@ -177,7 +186,7 @@ if submit:
             st.header("Key Performance Indicators")
             st.metric(
                 f'**Current {yfSymbol} Price\nAnd Change Since Last Query**',
-                f"${df['Adj Close'].iloc[-1:].values[0]:.2f}",
+                f"${df['Close'].iloc[-1:].values[0]:.2f}",
                 f"{df['Change'].iloc[-1:].values[0]:.2f}"
             )
             st.metric(
@@ -199,7 +208,7 @@ if submit:
         with col2:
             st.header("Live Data")
             st.write(f"Charts and graphs will be updated every {INTerval} {time_interval}s")
-            st.dataframe(df[['Adj Close', 'Change', 'Position', 'Check']])
+            st.dataframe(df[['Close', 'Change', 'Position', 'Check']])
             st.write("To terminate the bot, simply close the tab!")
 
         with col3:
@@ -224,17 +233,17 @@ if submit:
 
             # Get current data
             try:
-                price = yf.download(yfSymbol, interval = interval, period = period, progress=False)['Adj Close'][-1:].values[0]
-            except OverflowError or Exception or ConnectionError:
+                price = yf.download(yfSymbol, interval = interval, period = period, progress=False, multi_level_index=False)['Close'][-1:].values[0]
+            except (OverflowError, Exception, ConnectionError):
                 st.info(f"Error: Data Missing")
                 continue
             else: pass
 
-            current_data.loc[time_stamp] = pd.Series([price], ['Adj Close'])
+            current_data.loc[time_stamp] = pd.Series([price], ['Close'])
 
             # Append historical data to current data and run through strategy
             all_data = pd.concat([all_data, current_data.tail(1)])
-            all_data['Change'][-1] = price - all_data['Adj Close'][-2]
+            all_data['Change'][-1] = price - all_data['Close'][-2]
             execute = ExecuteStrategy(all_data, direction)
             all_data = getattr(execute, algorithm)()
 
@@ -244,7 +253,7 @@ if submit:
             df = all_data[ndata:]
 
             # Key Metrics
-            curr_price = df['Adj Close'].iloc[-1:].values[0]
+            curr_price = df['Close'].iloc[-1:].values[0]
             curr_change = df['Change'].iloc[-1:].values[0]
             perc_prof = len(df[df["Check"] == 1]) / (len(df) - 1) * 100
             perc_loss = len(df[df["Check"] == -1]) / (len(df) - 1) * 100
@@ -283,7 +292,7 @@ if submit:
                     st.header("Live Data")
                     st.write(f"Website will refresh and update graphs/charts every {INTerval} {time_interval}s")
                     # df_sel = df.query("Position == @position_translation & Check == @check_translation")
-                    st.dataframe(df[['Adj Close', 'Change', 'Position', 'Check']])
+                    st.dataframe(df[['Close', 'Change', 'Position', 'Check']])
                     st.write("To terminate the bot, simply close the tab!")
                     
                 with col3:
