@@ -11,6 +11,7 @@ import warnings
 import plotly.express as px
 from sklearn.linear_model import RidgeCV
 from sklearn.model_selection import RepeatedKFold
+from sklearn.ensemble import RandomForestRegressor
 
 folder = "AlgoBot/"
 
@@ -48,7 +49,7 @@ class ExecuteStrategy:
         Buy and hold, passive return
         """
         df = self.df.copy()
-        df.Position[-1] = self.PosUp
+        df.loc[df.index[-1], 'Position'] = self.PosUp
         return df
 
 
@@ -63,9 +64,9 @@ class ExecuteStrategy:
         df['MACD'] = ta.macd(df['Close'], fast=12, slow=26, signal=9).iloc[:, 1]
 
         if df.MACD[-1:].values > 0:
-            df.Position[-1] = self.PosUp
+            df.loc[df.index[-1], 'Position'] = self.PosUp
         else:
-            df.Position[-1] = self.PosDown
+            df.loc[df.index[-1], 'Position'] = self.PosDown
         return df
 
     def MACD_RSI_Indicator(self, length=14) -> pd.DataFrame:
@@ -86,15 +87,15 @@ class ExecuteStrategy:
         # Or if MACD crosses over signal line AND RSI is less than 50, buy
         if (df.RSI[-2:-1].values <= 28 and df.RSI[-1:].values > df.RSI[-2:-1].values) or \
                 (df.MACD[-1:].values > df.MACD[-4:-1].values.mean() and df.RSI[-1:].values <= 50):
-            df.Position[-1] = self.PosUp
+            df.loc[df.index[-1], 'Position'] = self.PosUp
         # If previous RSI is greater than 70 and current RSI less than previous, sell
         # Or if Signal line crosses over MACD and RSI greater than 50, sell
         elif (df.RSI[-2:-1].values >= 72 and df.RSI[-1:].values < df.RSI[-2:-1].values) or \
                 (df.MACD[-1:].values < df.MACD[-4:-1].values.mean() and df.RSI[-1:].values > 50):
-            df.Position[-1] = self.PosDown
+            df.loc[df.index[-1], 'Position'] = self.PosDown
         # keep previous position if otherwise
         else:
-            df.Position.iloc[-1] = df.Position[-2:-1].values
+            df.loc[df.index[-1], 'Position'] = df.Position.iloc[-2]
         return df
 
     def RSI_Indicator(self, length=14) -> pd.DataFrame:
@@ -109,13 +110,13 @@ class ExecuteStrategy:
 
         # If previous RSI is less than 30 and current RSI greater than previous, buy
         if df.RSI[-2:-1].values <= 30 and df.RSI[-1:].values > df.RSI[-2:-1].values:
-            df.Position[-1] = self.PosUp
+            df.loc[df.index[-1], 'Position'] = self.PosUp
         # If previous RSI is greater than 70 and current RSI less than previous, sell
         elif df.RSI[-2:-1].values >= 70 and df.RSI[-1:].values < df.RSI[-2:-1].values:
-            df.Position[-1] = self.PosDown
+            df.loc[df.index[-1], 'Position'] = self.PosDown
         # keep previous position if otherwise
         else:
-            df.Position[-1] = df.Position[-2:-1].values
+            df.loc[df.index[-1], 'Position'] = df.Position.iloc[-2]
         return df
 
     def ReynerTeosBBands(self) -> pd.DataFrame:
@@ -133,14 +134,14 @@ class ExecuteStrategy:
         if df['FilledPosition'][-2:-1].values == 0 and \
         df['Close'][-1:].values > df['SMA200'][-1:].values and \
         df['Close'][-1:].values < df['LowerBand'][-1:].values:
-            df.Position[-1] = self.PosUp
+            df.loc[df.index[-1], 'Position'] = self.PosUp
         # Define exit conditions if already position
         elif df['FilledPosition'][-2:-1].values == 1 and \
         (df['RSI'][-1:].values >= 50 or sum(df['FilledPosition'][-11:-1]) == 10):
-            df.Position[-1] = self.PosDown
+            df.loc[df.index[-1], 'Position'] = self.PosDown
         # If neither entry or exit conditions are met, maintain current position
         else:
-            df.Position[-1] = df.Position[-2:-1].values
+            df.loc[df.index[-1], 'Position'] = df.Position.iloc[-2]
         return df
 
 
@@ -168,8 +169,8 @@ class ExecuteStrategy:
         stock_windows = create_targets(stock)
 
         # Preprocessing: Scale data for Ridge Regression modeling
-        minscaler = float(stock_windows.min()[window_size])
-        maxscaler = float(stock_windows.max()[window_size])
+        minscaler = float(stock_windows.min()['Target'])
+        maxscaler = float(stock_windows.max()['Target'])
         stock_windows = (stock_windows - minscaler) / (maxscaler - minscaler)
 
         # Convert target pandas df to array
@@ -189,9 +190,9 @@ class ExecuteStrategy:
         X_test, _ = dfToArray(test)
 
         # define ridge regression model evaluation method
-        cv = RepeatedKFold(n_splits=10, n_repeats=5, random_state=20005933)
+        cv = RepeatedKFold(n_splits=5, n_repeats=2, random_state=20005933)
         # create model
-        reg_model = RidgeCV(alphas=np.arange(0.01, 2+0.01, 0.01), cv=cv, scoring='neg_mean_absolute_error')
+        reg_model = RidgeCV(alphas=np.arange(0.1, 2+0.1, 0.2), cv=cv, scoring='neg_mean_absolute_error')
         # train model
         reg_model.fit(X_train, y_train)
 
@@ -206,15 +207,77 @@ class ExecuteStrategy:
             predictions = [-1]
 
         df['RidgeRegD'] = 0
-        df['RidgeRegD'][-1:] = predictions
+        df.loc[df.index[-1], 'RidgeRegD'] = predictions[0]
 
         # Strategy: Buy/sell at start of day based on if today's returns are predicted to be positive or negative, 1 stock at a time
         # Opted to use a Long only strategy because it has lower std and drawdowns than long + short strategy
         # If my predicted daily returns for today is higher than the n-day SMA of my predicted daily returns
         if df['RidgeRegD'][-1:].values >= 0:
-            df.Position[-1] = self.PosUp
+            df.loc[df.index[-1], 'Position'] = self.PosUp
         else:  # If opposite, sell signal
-            df.Position[-1] = self.PosDown
+            df.loc[df.index[-1], 'Position'] = self.PosDown
+        return df
+
+    def RandomForest_Indicator(self, window_size: int = 7) -> pd.DataFrame:
+        """
+        Strategy that uses a random forest regression model to predict
+        the returns of the next time period to determine if a
+        position should be active or not. Outputs dataframe with
+        predicted returns and position
+        """
+        stock = self.df.copy()
+        df = self.df.copy()
+        
+        close_col = 'Close' if 'Close' in stock.columns else 'Adj Close'
+        stock['LogReturns'] = np.log1p(stock[close_col].pct_change())
+        stock = stock.loc[:, ['LogReturns']][1:]
+
+        def create_targets(stock_data, n=window_size):
+            target_df = stock_data.copy().drop(columns='LogReturns')
+            for j in range(n, -1, -1):
+                target_df[f'Target-{j}'] = stock_data['LogReturns'].shift(j)
+            target_df.rename(columns={'Target-0': 'Target'}, inplace=True)
+            target_df = target_df[n:]
+            return target_df
+
+        stock_windows = create_targets(stock)
+
+        minscaler = float(stock_windows.min()['Target'])
+        maxscaler = float(stock_windows.max()['Target'])
+        stock_windows = (stock_windows - minscaler) / (maxscaler - minscaler)
+
+        def dfToArray(df):
+            df_np = df.to_numpy()
+            X = df_np[:, :-1]
+            y = df_np[:, -1]
+            return X, y
+
+        split = int(len(stock_windows) * 0.7)
+        train = stock_windows[:split]
+        test = stock_windows[split:]
+
+        X_train, y_train = dfToArray(train)
+        X_test, _ = dfToArray(test)
+
+        rf_model = RandomForestRegressor(n_estimators=50, max_depth=8, random_state=20005933, n_jobs=-1, max_samples=0.8)
+        rf_model.fit(X_train, y_train)
+
+        pred_list = []
+        batch = X_test[-window_size:, -1].reshape(1, window_size)
+        pred_list.append(rf_model.predict(batch)[0])
+        predictions = [float((i * (maxscaler - minscaler)) + minscaler) for i in pred_list]
+        if predictions[0] >= 0:
+            predictions = [1]
+        else:
+            predictions = [-1]
+
+        df['RandomForestD'] = 0
+        df.loc[df.index[-1], 'RandomForestD'] = predictions[0]
+
+        if df['RandomForestD'][-1:].values >= 0:
+            df.loc[df.index[-1], 'Position'] = self.PosUp
+        else:
+            df.loc[df.index[-1], 'Position'] = self.PosDown
         return df
 
 
@@ -380,12 +443,13 @@ def checkstrat(all_data: pd.DataFrame, execute: ExecuteStrategy):
     # If current position is none and change in price from current to previous call is negative, Good!
     if (all_data.Change[-1:].values >= 0 and all_data.Position[-2:-1].values == execute.PosUp) or \
             (all_data.Change[-1:].values < 0 and all_data.Position[-2:-1].values == execute.PosDown):
-        all_data.Check[-1] = 1
+        all_data.loc[all_data.index[-1], 'Check'] = 1
     # If current position is long and change in price from current to previous call is negative, Bad!
     # If current position is short and change in price from current to previous call is positive, Bad!
     elif (all_data.Change[-1:].values < 0 and all_data.Position[-2:-1].values == execute.PosUp) or \
         (all_data.Change[-1:].values >= 0 and all_data.Position[-2:-1].values == execute.PosDown):
-        all_data.Check[-1] = -1
+        all_data.loc[all_data.index[-1], 'Check'] = -1
     # For all other cases, Neutral!
-    else: all_data.Check[-1] = 0
+    else: 
+        all_data.loc[all_data.index[-1], 'Check'] = 0
     return all_data

@@ -1,38 +1,43 @@
 # Problem Checker Results
 
-## Guideline 1: Realistic and representative
-**Passes.**
+## Guideline 1: Realistic and Representative
+**PASSES**
 
-The problem asks to implement a new ARIMA-based trading strategy following existing conventions, integrate it with the `ExecuteStrategy` class in `funcs.py`, and make it selectable in the Streamlit front-end. This is a realistic feature request for an engineer working on this algorithmic trading dashboard. The codebase already has 6 strategies (including an ML-based `Ridge_Indicator`), and adding another ML strategy is a natural extension. All referenced components (strategy executor class, front-end dropdown) exist in the codebase.
+The problem asks for a RandomForest-based trading strategy modeled after the existing Ridge_Indicator — a natural extension since the codebase already uses sklearn for ML-based strategies. Integrating it with the strategy executor and frontend follows the established pattern. Building a backtesting file is realistic — the README explicitly mentions this as a planned feature. All requested performance metrics (Sharpe ratio, Sortino ratio, max drawdown, total return, alpha/beta, win rate) are standard quantitative finance metrics. Walk-forward validation is a well-known backtesting methodology. All requirements are feasible and logically consistent with the codebase.
 
-## Guideline 2: Requires codebase engagement
-**Passes.**
+## Guideline 2: Requires Codebase Engagement
+**PASSES**
 
-Solving this requires the agent to:
-- Explore the `ExecuteStrategy` class in `funcs.py` to understand strategy conventions (copying `self.df`, setting `df.Position[-1]` to `self.PosUp`/`self.PosDown`, returning a DataFrame).
-- Study existing strategies (especially the ML-based `Ridge_Indicator`) as a reference.
-- Find and update the hardcoded strategy list in the `st.selectbox` in `app.py` (line 100).
-- Understand what dependencies exist and add new ones (e.g., `statsmodels`) to `requirements.txt`.
+The agent must read and understand the `Ridge_Indicator` method in `funcs.py` to replicate its class structure, method signatures, and conventions (lagged feature construction, scaling, signal generation via `self.PosUp`/`self.PosDown`, returning a DataFrame with Position set on the last row). It must understand how `ExecuteStrategy` works and how strategies are dispatched via `getattr` in `app.py`. It must modify the hardcoded selectbox list in `app.py` to add the new strategy. The backtesting component requires understanding how all existing strategies work to run them programmatically. This cannot be solved without engaging with the codebase.
 
-This cannot be solved without engaging with the codebase.
+## Guideline 3: Programmatically Testable Requirements
+**PASSES**
 
-## Guideline 3: Programmatically testable requirements
-**Passes.**
+All requirements are testable:
+- RandomForest strategy follows the class structure/method signatures of Ridge_Indicator — testable via inspection of method signature, return type, class membership, and that it sets `Position` on the last row.
+- Integrated with ExecuteStrategy and frontend — testable by checking the method exists on the class and the name appears in the selectbox list.
+- Backtester uses BTC-USD at 5m interval with max period and position='both' — testable by inspecting the backtesting code's parameters or by running it.
+- Walk-forward validation (retraining on each window) — testable by verifying the backtesting logic retrains per window rather than fitting once.
+- All strategies tested on identical date ranges — testable by checking that the same data range is used across all strategy evaluations.
+- No external backtesting libraries — testable via import inspection.
+- Performance metrics (Sharpe ratio, Sortino ratio, max drawdown, total return, alpha/beta, win rate) calculated manually — testable by verifying the output includes these metrics and no external backtesting library is used.
+- Forward-fill missing values — testable by checking the data preprocessing logic.
+- Skip training windows with insufficient data — testable by verifying the code handles this case without crashing.
 
-All requirements are testable in principle:
-- The ARIMA strategy method exists on `ExecuteStrategy` and follows the same structure/conventions as existing strategies (returns a DataFrame, sets Position correctly).
-- Buy/sell signal logic is clearly specified: buy when the ARIMA forecast exceeds the current price, sell when lower.
-- Front-end integration: the new strategy name appears in the `st.selectbox` list in `app.py`.
-- The strategy can be invoked via `getattr(execute, strategy_name)()` like existing strategies.
-- Integration with the existing strategy executor class can be verified by instantiating `ExecuteStrategy` and calling the new method.
+## Guideline 4: Self-Contained
+**PASSES**
 
-## Guideline 4: Self-contained
-**Passes.**
-
-The problem statement and codebase together provide all necessary information. The agent can find the `ExecuteStrategy` class, study existing strategy conventions, understand the front-end dropdown, and implement the ARIMA strategy with clearly specified signal logic. No external information or assumptions are required beyond what is available in the codebase and problem statement.
+The problem statement provides sufficient information for the agent to solve it. It specifies: the model type (RandomForest), the pattern to follow (Ridge_Indicator's conventions), the integration points (ExecuteStrategy class and frontend), the backtesting parameters (BTC-USD, 5m, max period, position='both'), the validation approach (walk-forward), the metrics to compute (Sharpe, Sortino, max drawdown, total return, alpha/beta vs buy & hold, win rate), and edge case handling (forward-fill gaps, skip insufficient windows). The signal generation logic is not explicitly specified, but since the problem says to follow Ridge_Indicator's conventions, the agent has all the information needed — Ridge_Indicator's signal logic (buy when predicted return >= 0, sell when < 0) is available in the codebase and serves as the template. No external information or assumptions are needed.
 
 ---
 
-## Overall Result: PASSES ALL GUIDELINES
+## Summary
 
-The problem passes all four guidelines. You can proceed.
+| Guideline | Result |
+|---|---|
+| 1. Realistic and representative | **Pass** |
+| 2. Requires codebase engagement | **Pass** |
+| 3. Programmatically testable | **Pass** |
+| 4. Self-contained | **Pass** |
+
+**The problem passes all four guidelines.** You can proceed.
